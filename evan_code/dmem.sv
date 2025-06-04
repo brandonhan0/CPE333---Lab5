@@ -31,6 +31,7 @@ output logic [31:0] w7
 );
 logic [31:0] ram[0:16383];
 initial $readmemh("otter_memory.mem", ram, 0, 16383);
+
 //changed memory so it does output 8 words
 assign w0 = ram[{a[31:5],3'h0}];
 assign w1 = ram[{a[31:5],3'h1}];

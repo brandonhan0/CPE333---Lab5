@@ -3,9 +3,9 @@
 // Company: 
 // Engineer: 
 // 
-// Create Date: 02/28/2025 12:32:55 PM
+// Create Date: 02/28/2025 12:33:26 PM
 // Design Name: 
-// Module Name: imem
+// Module Name: CacheFSM
 // Project Name: 
 // Target Devices: 
 // Tool Versions: 
@@ -18,36 +18,38 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
-module imem(
-input logic [31:0] a,
-output logic [31:0] w0,
-output logic [31:0] w1,
-output logic [31:0] w2,
-output logic [31:0] w3,
-output logic [31:0] w4,
-output logic [31:0] w5,
-output logic [31:0] w6,
-output logic [31:0] w7
-);
-logic [31:0] ram[0:16383];
-initial $readmemh("otter_memory.mem", ram, 0, 16383);
-//changed memory so it does output 8 words
-assign w0 = ram[{a[31:5],3'h0}];
-assign w1 = ram[{a[31:5],3'h1}];
-assign w2 = ram[{a[31:5],3'h2}];
-assign w3 = ram[{a[31:5],3'h3}];
-assign w4 = ram[{a[31:5],3'h4}];
-assign w5 = ram[{a[31:5],3'h5}];
-assign w6 = ram[{a[31:5],3'h6}];
-assign w7 = ram[{a[31:5],3'h7}];
-/* org code
-assign w0 = ram[a[31:2]];
-assign w1 = ram[a[31:2]+1];
-assign w2 = ram[a[31:2]+2];
-assign w3 = ram[a[31:2]+3];
-assign w4 = ram[a[31:2]+4];
-assign w5 = ram[a[31:2]+5];
-assign w6 = ram[a[31:2]+6];
-assign w7 = ram[a[31:2]+7];
-*/
+module CacheSAFSM(input hit, input miss, input CLK, input RST, output logic update, output logic pc_stall);
+typedef enum{
+    ST_READ_CACHE,
+    ST_READ_MEM
+} state_type;
+state_type PS, NS;
+always_ff @(posedge CLK) begin
+    if(RST == 1)
+        PS <= ST_READ_MEM;
+    else
+        PS <= NS;
+end
+always_comb begin
+    update = 1'b1;
+    pc_stall = 0;
+    case (PS)
+        ST_READ_CACHE: begin
+            update = 1'b0;
+            if(hit) begin
+                NS = ST_READ_CACHE;
+            end
+            else if(miss) begin
+                pc_stall = 1'b1;
+                NS = ST_READ_MEM;
+            end
+            else NS = ST_READ_CACHE;
+        end
+        ST_READ_MEM: begin
+            pc_stall = 1'b1;
+            NS = ST_READ_CACHE;
+        end
+        default: NS = ST_READ_CACHE;
+    endcase
+end
 endmodule

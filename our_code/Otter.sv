@@ -63,7 +63,7 @@ typedef struct packed{ // if it has a "//" it means its assigned and used but we
 
     wire [31:0] w0, w1, w2, w3, w4, w5, w6, w7;
     wire cache_stall, hit, miss, update;
-    
+
     
 //==== Instruction Fetch ===========================================
      logic [31:0] if_de_pc;
@@ -109,21 +109,21 @@ typedef struct packed{ // if it has a "//" it means its assigned and used but we
     logic [31:0] de_ex_rs2;
 
                              
- Memory OTTER_MEMORY (
-      .MEM_CLK   (CLK),
-      .MEM_RDEN1 (memRDEN1), 
-      .MEM_RDEN2 (ex_mem_inst.memRead2), 
-      .MEM_WE2   (ex_mem_inst.memWrite),
-      .MEM_DIN2  (ex_mem_inst.rs2),
-      .MEM_ADDR1 (PC[15:2]),
-      .MEM_ADDR2 (ex_mem_inst.ALU_Result), 
-      .MEM_SIZE  (ex_mem_inst.mem_type[1:0]),
-      .MEM_SIGN  (ex_mem_inst.mem_type[2]),
-      .IO_IN     (IOBUS_IN),
-      .IO_WR     (IOBUS_WR),
-      .MEM_DOUT1 (mem_instruction), // we dont get insturction memory from this anymore
-      .MEM_DOUT2 (dout2));
-
+ //Memory OTTER_MEMORY (
+ //     .MEM_CLK   (CLK),
+ //     .MEM_RDEN1 (memRDEN1), 
+ //     .MEM_RDEN2 (ex_mem_inst.memRead2), 
+ //     .MEM_WE2   (ex_mem_inst.memWrite),
+ //     .MEM_DIN2  (ex_mem_inst.rs2),
+ //     .MEM_ADDR1 (PC[15:2]),
+ //     .MEM_ADDR2 (ex_mem_inst.ALU_Result), 
+ //     .MEM_SIZE  (ex_mem_inst.mem_type[1:0]),
+ //     .MEM_SIGN  (ex_mem_inst.mem_type[2]),
+ //     .IO_IN     (IOBUS_IN),
+ //     .IO_WR     (IOBUS_WR),
+ //     .MEM_DOUT1 (mem_instruction), // we dont get insturction memory from this anymore
+ //     .MEM_DOUT2 (dout2)); //brandon smells funny ever since we stopped using data memory from this module
+ 
     instr_t de_ex_inst;
     
     always_comb begin
@@ -355,7 +355,7 @@ typedef struct packed{ // if it has a "//" it means its assigned and used but we
 
 
 
-//====== Memory Cache ====================================================
+//====== Instruction Memory Cache ====================================================
 
 
 
@@ -397,6 +397,10 @@ Cache Cache (
      .miss(miss)
     );
 
+//====== Data Memory Cache ====================================================
+
+logic [31:0] ow0, ow1, ow2, ow3, dw0, dw1, dw2, dw3, mem_wr_addr, mem_rd_addr;
+logic mem_read, mem_write, dm_hit, dm_miss, dm_update;
 sabuttcache sabuttcache(
     .clk(CLK), //top
     .rst(RST), //top
@@ -407,42 +411,48 @@ sabuttcache sabuttcache(
     .MEM_SIZE(ex_mem_inst.mem_type[1:0]),  //mem input
     .MEM_SIGN(ex_mem_inst.mem_type[2]),  //mem input
     .update(), // fsm input
-    .w0(), //block 1
-    .w1(),  //block 2
-    .w2(),  //block 3
-    .w3(),  // block 4
+    .w0(dw0), //block 1
+    .w1(dw1),  //block 2
+    .w2(dw2),  //block 3
+    .w3(dw3),  // block 4
     .IO_IN(IOBUS_IN), //top
     .dataout(),  //reg file
     .hit(),  // hazard and fsm
     .miss(),  // hazard and fsm
-    .memory_read(),  
-    .memory_write(), 
-    .mem_rd_addr(),
-    .mem_wr_addr(),
-    .ow0(), //read cache
-    .ow1(), 
-    .ow2(), 
-    .ow3(),
-    .IO_WR() 
+    .memory_read(mem_read),  
+    .memory_write(mem_write), 
+    .mem_rd_addr(mem_rd_addr),
+    .mem_wr_addr(mem_wr_addr),
+    .ow0(ow0), //read cache
+    .ow1(ow1), 
+    .ow2(ow2), 
+    .ow3(ow3),
+    .IO_WR(IOBUS_WR), //top
 );
 
-module CacheSA (
-  .PC(),
-  .CLK(),
-  .update(),
-  .w0(),
-  .w1(),
-  .w2(),
-  .w3(),
-  .w4(),
-  .w5(),
-  .w6(),
-  .w7(),
-  .rd(),
-  .hit(),
-  .miss()
-);
+DM_FSM Cache_FSM (
+     .hit(dm_hit),        // in
+     .miss(dm_miss),
+     .CLK(CLK),
+     .RST(RESET),
+     .update(dm_update),  // out
+     .pc_stall(cache_stall)      // (stall)
+    );
 
- 
+dmem DataMemory (
+    .MEM_CLK (CLK),
+    .MEM_RDEN2 (mem_read),        // read enable data
+    .MEM_WE2 (mem_write),          // write enable.
+    .mem_rd_addr (mem_wr_addr), // Data Memory Addr
+    .mem_wr_addr (mem_rd_addr),  // Data to save
+    .ow0 (ow0),
+    .ow1 (ow1),
+    .ow2 (ow2),
+    .ow3 (ow3),
+    .w0 (dw0),
+    .w1 (dw1),
+    .w2 (dw2),
+    .w3 (dw3)
+    );
 
 endmodule

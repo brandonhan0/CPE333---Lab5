@@ -219,7 +219,7 @@ assign mem_wr_addr = {tags[index][curr_way], index, 4'b0000} ;
 // always use current tag index for memory read
 assign mem_rd_addr = {tag,index,4'h0};
 
-assign {ow0, ow1, ow2, ow3} = {data[index][curr_way][0], data[index][curr_way][1], data[index][curr_way][2], data[index][curr_way][3]};
+assign {ow0, ow1, ow2, ow3} = {data[index][curr_way][+0], data[index][curr_way][1], data[index][curr_way][2], data[index][curr_way][3]};
 
 logic [1:0] saved_mem_size, saved_byteoffset;
 logic [31:0] saved_address;
