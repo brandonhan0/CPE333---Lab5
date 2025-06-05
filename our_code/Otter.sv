@@ -401,34 +401,48 @@ Cache Cache (
 
 logic [31:0] ow0, ow1, ow2, ow3, dw0, dw1, dw2, dw3, mem_wr_addr, mem_rd_addr;
 logic mem_read, mem_write, dm_hit, dm_hit, dm_update, dm_stall;
-sabuttcache sabuttcache(
-    .clk(CLK), //top
-    .rst(RST), //top
+
+setasscache setasscache(
+    .CLK(CLK), //top
+    .RST(RST), //top
     .address(rd), // main mem
-    .datain(), // dafuq
-    .cache_write(), 
-    .cache_read(), 
-    .MEM_SIZE(ex_mem_inst.mem_type[1:0]),  //mem input
-    .MEM_SIGN(ex_mem_inst.mem_type[2]),  //mem input
+    .read(de_ex_inst.memRead2), 
+    .write(de_ex_inst.memWrite), 
+    .write_data(de_ex_inst.rs2), //check me on this
+    .size(ex_mem_inst.mem_type[1:0]),  //mem input
+    .sign(ex_mem_inst.mem_type[2]),  //mem input
     .update(dm_update), // fsm input
-    .w0(dw0), //block 1
-    .w1(dw1),  //block 2
-    .w2(dw2),  //block 3
+    .w0(dw0),  // block 1
+    .w1(dw1),  // block 2
+    .w2(dw2),  // block 3
     .w3(dw3),  // block 4
     .IO_IN(IOBUS_IN), //top
-    .dataout(),  //reg file
+    .out(dout2),  
     .hit(dm_hit),  // hazard and fsm
-    .miss(dm_hit),  // hazard and fsm
-    .memory_read(mem_read),  
-    .memory_write(mem_write), 
-    .mem_rd_addr(mem_rd_addr),
-    .mem_wr_addr(mem_wr_addr),
+    .miss(dm_miss),  // hazard and fsm
     .ow0(ow0), //read cache
     .ow1(ow1), 
     .ow2(ow2), 
     .ow3(ow3),
     .IO_WR(IOBUS_WR), //top
 );
+/*input  logic           CLK,
+    input  logic         RST,
+    input  logic [31:0]  address, // 
+    input  logic         read,
+    input  logic         write,
+    input  logic [31:0]  write_data,
+    input  logic [1:0]   size,
+    input  logic         sign,     // sign extension for reads
+    input  logic [31:0]  IO_IN,    // Memory Mapped IO Read
+    input  logic         update,
+    input  logic [31:0]  w0, w1, w2, w3,
+    output logic [31:0]  ow0, ow1, ow2, ow3,
+    output logic [31:0]  out,    // output when loading
+    output logic         hit,
+    output logic         miss,
+    output logic         IO_WR // Memory Mapped IO Write
+    );*/
 
 DM_FSM Cache_FSM (
      .hit(dm_hit),        // in
@@ -443,8 +457,8 @@ dmem DataMemory (
     .MEM_CLK (CLK),
     .MEM_RDEN2 (mem_read),        // read enable data
     .MEM_WE2 (mem_write),          // write enable.
-    .mem_rd_addr (mem_wr_addr), // Data Memory Addr
-    .mem_wr_addr (mem_rd_addr),  // Data to save
+    .mem_rd_addr (mem_rd_addr), // Data Memory Addr
+    .mem_wr_addr (mem_wr_addr),  // Data to save
     .ow0 (ow0),
     .ow1 (ow1),
     .ow2 (ow2),
