@@ -223,7 +223,7 @@ typedef struct packed{ // if it has a "//" it means its assigned and used but we
       .D_OUT (de_inst.ALU_B));
     
    always_ff@(posedge CLK) begin //transfers stuff from pre register to post register
-       if (!flush && !stall && !flush_2 && !cache_stall) begin
+       if (!flush && !stall && !flush_2 && !cache_stall && !dm_stall) begin
           de_ex_inst  <= de_inst;
        end else begin
           de_ex_inst  <= 0;         
@@ -400,25 +400,25 @@ Cache Cache (
 //====== Data Memory Cache ====================================================
 
 logic [31:0] ow0, ow1, ow2, ow3, dw0, dw1, dw2, dw3, mem_wr_addr, mem_rd_addr;
-logic mem_read, mem_write, dm_hit, dm_miss, dm_update;
+logic mem_read, mem_write, dm_hit, dm_hit, dm_update, dm_stall;
 sabuttcache sabuttcache(
     .clk(CLK), //top
     .rst(RST), //top
     .address(rd), // main mem
-    .datain(), // main mem
-    .cache_write(), //fsm
-    .cache_read(), // fsm
+    .datain(), // dafuq
+    .cache_write(), 
+    .cache_read(), 
     .MEM_SIZE(ex_mem_inst.mem_type[1:0]),  //mem input
     .MEM_SIGN(ex_mem_inst.mem_type[2]),  //mem input
-    .update(), // fsm input
+    .update(dm_update), // fsm input
     .w0(dw0), //block 1
     .w1(dw1),  //block 2
     .w2(dw2),  //block 3
     .w3(dw3),  // block 4
     .IO_IN(IOBUS_IN), //top
     .dataout(),  //reg file
-    .hit(),  // hazard and fsm
-    .miss(),  // hazard and fsm
+    .hit(dm_hit),  // hazard and fsm
+    .miss(dm_hit),  // hazard and fsm
     .memory_read(mem_read),  
     .memory_write(mem_write), 
     .mem_rd_addr(mem_rd_addr),
@@ -436,7 +436,7 @@ DM_FSM Cache_FSM (
      .CLK(CLK),
      .RST(RESET),
      .update(dm_update),  // out
-     .pc_stall(cache_stall)      // (stall)
+     .pc_stall(dm_stall)      // (stall)
     );
 
 dmem DataMemory (

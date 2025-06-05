@@ -18,7 +18,7 @@
     
     logic [13:0] wordAddr2;
     logic [31:0] memReadWord, ioBuffer, memReadSized;
-    logic [1:0] byteOffset;
+    logic [1:0] byteOffset = mem_rd_addr[3:2];
        
     (* rom_style="{distributed | block}" *)
     (* ram_decomp = "power" *) logic [31:0] memory [0:16383];
@@ -33,17 +33,37 @@
     
       // save data (WD) to memory (ADDR2)
       if (MEM_WE2 == 1) begin     // write enable and valid address space
-        memory[mem_wr_addr + 0]  <= ow0[mem_wr_addr + 0];
-        memory[mem_wr_addr + 1]  <= ow1[mem_wr_addr + 1];
-        memory[mem_wr_addr + 2]  <= ow2[mem_wr_addr + 2];
-        memory[mem_wr_addr + 3]  <= ow3[mem_wr_addr + 3];
+        memory[mem_wr_addr + 0]  <= ow0;
+        memory[mem_wr_addr + 1]  <= ow1;
+        memory[mem_wr_addr + 2]  <= ow2;
+        memory[mem_wr_addr + 3]  <= ow3;
       end
     
       if (MEM_RDEN2) begin     // Read word from memory
-        w0[mem_rd_addr + 0] <= memory[mem_rd_addr + 0];
-        w1[mem_rd_addr + 1] <= memory[mem_rd_addr + 1];
-        w2[mem_rd_addr + 2] <= memory[mem_rd_addr + 2];
-        w3[mem_rd_addr + 3] <= memory[mem_rd_addr + 3];
+      case(byteOffset)
+      
+      2'b00: w0 <= memory[mem_rd_addr + 0];
+             w1 <= memory[mem_rd_addr + 1];
+             w2 <= memory[mem_rd_addr + 2];
+             w3 <= memory[mem_rd_addr + 3];
+
+      2'b01: w0 <= memory[mem_rd_addr - 1];
+             w1 <= memory[mem_rd_addr + 0];
+             w2 <= memory[mem_rd_addr + 1];
+             w3 <= memory[mem_rd_addr + 2];
+
+      2'b10: w0 <= memory[mem_rd_addr - 2];
+             w1 <= memory[mem_rd_addr - 1];
+             w2 <= memory[mem_rd_addr + 0];
+             w3 <= memory[mem_rd_addr + 1];
+
+      2'b11: w0 <= memory[mem_rd_addr - 3];
+             w1 <= memory[mem_rd_addr - 2];
+             w2 <= memory[mem_rd_addr - 1];
+             w3 <= memory[mem_rd_addr + 0];
+
+      endcase
+        
       end
     end
        
