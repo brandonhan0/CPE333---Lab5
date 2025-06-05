@@ -426,23 +426,7 @@ setasscache setasscache(
     .ow3(ow3),
     .IO_WR(IOBUS_WR), //top
 );
-/*input  logic           CLK,
-    input  logic         RST,
-    input  logic [31:0]  address, // 
-    input  logic         read,
-    input  logic         write,
-    input  logic [31:0]  write_data,
-    input  logic [1:0]   size,
-    input  logic         sign,     // sign extension for reads
-    input  logic [31:0]  IO_IN,    // Memory Mapped IO Read
-    input  logic         update,
-    input  logic [31:0]  w0, w1, w2, w3,
-    output logic [31:0]  ow0, ow1, ow2, ow3,
-    output logic [31:0]  out,    // output when loading
-    output logic         hit,
-    output logic         miss,
-    output logic         IO_WR // Memory Mapped IO Write
-    );*/
+
 
 DM_FSM Cache_FSM (
      .hit(dm_hit),        // in

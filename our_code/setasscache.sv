@@ -23,6 +23,7 @@ module setasscache (
     output logic         IO_WR, // Memory Mapped IO Write
     output logic         weAddrValid
     );
+    
     parameter NUM_SETS    = 4;
     parameter WAYS        = 4;
     parameter BLOCK_WORDS = 4;   // each block is 4 words (4 × 32 bits = 128 bits)
@@ -57,7 +58,57 @@ module setasscache (
     logic  i, j;
     integer lru_way = 0;
 
+    
+// ========= STOLEN FROM MEM FILE =================================================================
 
+
+    logic [31:0] ioBuffer, memReadSized;
+    logic [1:0] byteOffset;     
+    assign byteOffset = address[1:0];     
+
+    always_comb begin
+      case({sign,size,byteOffset})
+        5'b00011: memReadSized = {{24{read_data[31]}},read_data[31:24]};  // signed byte
+        5'b00010: memReadSized = {{24{read_data[23]}},read_data[23:16]};
+        5'b00001: memReadSized = {{24{read_data[15]}},read_data[15:8]};
+        5'b00000: memReadSized = {{24{read_data[7]}},read_data[7:0]};
+                                    
+        5'b00110: memReadSized = {{16{read_data[31]}},read_data[31:16]};  // signed half
+        5'b00101: memReadSized = {{16{read_data[23]}},read_data[23:8]};
+        5'b00100: memReadSized = {{16{read_data[15]}},read_data[15:0]};
+            
+        5'b01000: memReadSized = read_data;                   // word
+               
+        5'b10011: memReadSized = {24'd0,read_data[31:24]};    // unsigned byte
+        5'b10010: memReadSized = {24'd0,read_data[23:16]};
+        5'b10001: memReadSized = {24'd0,read_data[15:8]};
+        5'b10000: memReadSized = {24'd0,read_data[7:0]};
+               
+        5'b10110: memReadSized = {16'd0,read_data[31:16]};    // unsigned half
+        5'b10101: memReadSized = {16'd0,read_data[23:8]};
+        5'b10100: memReadSized = {16'd0,read_data[15:0]};
+            
+        default:  memReadSized = 32'b0;     // unsupported size, byte offset combination
+      endcase
+    end
+
+
+
+    // Memory Mapped IO
+    always_comb begin
+      if(address >= 32'h00010000) begin  // external address range
+        IO_WR = write;                 // IO Write
+        out = ioBuffer;            // IO read from buffer
+        weAddrValid = 0;                 // address beyond memory range
+      end
+      else begin
+        IO_WR = 0;                  // not MMIO
+        out = memReadSized;   // output sized and sign extended data
+        weAddrValid = write;      // address in valid memory range
+      end
+    end
+
+    
     // On reset, clear all valid/dirty bits and initialize LRU counters
     always_ff @(posedge CLK or posedge RST) begin
         if(read)
@@ -101,7 +152,7 @@ module setasscache (
                 if (write) begin
                     // 2b) On store, overwrite just the 32 bit slice and set dirty
                     if (cache[set_index][lru_way].valid && cache[set_index][lru_way].dirty) begin
-                        // *** WRITEBACK should occur here (outside this module) ***
+                        // *** WRITEBACK should occur here ***
                         ow0 <= cache[set_index][lru_way].block[31:0];
                         ow1 <= cache[set_index][lru_way].block[63:32];
                         ow2 <= cache[set_index][lru_way].block[95:64];
@@ -176,52 +227,4 @@ module setasscache (
     end
 
 
-// ========= STOLEN FROM MEM FILE =================================================================
-
-
-    logic [31:0] ioBuffer, memReadSized;
-    logic [1:0] byteOffset;     
-    assign byteOffset = address[1:0];     
-
-    always_comb begin
-      case({sign,size,byteOffset})
-        5'b00011: memReadSized = {{24{read_data[31]}},read_data[31:24]};  // signed byte
-        5'b00010: memReadSized = {{24{read_data[23]}},read_data[23:16]};
-        5'b00001: memReadSized = {{24{read_data[15]}},read_data[15:8]};
-        5'b00000: memReadSized = {{24{read_data[7]}},read_data[7:0]};
-                                    
-        5'b00110: memReadSized = {{16{read_data[31]}},read_data[31:16]};  // signed half
-        5'b00101: memReadSized = {{16{read_data[23]}},read_data[23:8]};
-        5'b00100: memReadSized = {{16{read_data[15]}},read_data[15:0]};
-            
-        5'b01000: memReadSized = read_data;                   // word
-               
-        5'b10011: memReadSized = {24'd0,read_data[31:24]};    // unsigned byte
-        5'b10010: memReadSized = {24'd0,read_data[23:16]};
-        5'b10001: memReadSized = {24'd0,read_data[15:8]};
-        5'b10000: memReadSized = {24'd0,read_data[7:0]};
-               
-        5'b10110: memReadSized = {16'd0,read_data[31:16]};    // unsigned half
-        5'b10101: memReadSized = {16'd0,read_data[23:8]};
-        5'b10100: memReadSized = {16'd0,read_data[15:0]};
-            
-        default:  memReadSized = 32'b0;     // unsupported size, byte offset combination
-      endcase
-    end
-
-
-
-    // Memory Mapped IO
-    always_comb begin
-      if(address >= 32'h00010000) begin  // external address range
-        IO_WR = write;                 // IO Write
-        out = ioBuffer;            // IO read from buffer
-        weAddrValid = 0;                 // address beyond memory range
-      end
-      else begin
-        IO_WR = 0;                  // not MMIO
-        out = memReadSized;   // output sized and sign extended data
-        weAddrValid = write;      // address in valid memory range
-      end
-    end
 endmodule
