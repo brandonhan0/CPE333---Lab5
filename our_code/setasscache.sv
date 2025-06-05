@@ -125,7 +125,7 @@ module setasscache (
             end
             hit <= 0;
             miss <= 0;
-            read_data <= 32'd0;
+            memReadSized <= 32'd0;
             IO_WR <= 0;
             
         end else if (read || write) begin
@@ -145,7 +145,7 @@ module setasscache (
 
             if (hit) begin
                 // 2a) On a hit: extract the requested 32-bit word from the 128-bit block
-                read_data <= cache[set_index][hit_way].block[word_offset * 32 +: 32];
+                memReadSized <= cache[set_index][hit_way].block[word_offset * 32 +: 32];
 
                 
 
@@ -209,7 +209,7 @@ module setasscache (
 
 
                 // 3c) Return the requested word (either from the fetched block or the newly written slice)
-                read_data <= cache[set_index][lru_way].block[word_offset * 32 +: 32];
+                memReadSized <= cache[set_index][lru_way].block[word_offset * 32 +: 32];
 
 
                 // 3d) Update LRU similarly: this way becomes MRU (0), increment all others that were < old LRU of lru_way
