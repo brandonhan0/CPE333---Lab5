@@ -24,7 +24,9 @@ module setasscache (
     output logic         mem_read,    // signal to fetch block from memory
     output logic [31:0]  mem_rd_addr, // address of the block to fetch
     output logic         mem_write,   // from fsm to write dirty block to mem
-    output logic [31:0]  mem_wr_addr // address of block to write to
+    output logic [31:0]  mem_wr_addr, // address of block to write to
+    output logic         vic_dirty,
+    output logic         vic_valid
     );
     
     parameter NUM_SETS    = 4;
@@ -64,8 +66,6 @@ module setasscache (
     logic line_hit; // 1 if tag was found in set
     logic [1:0] hit_way; // index of the way that was hit
     // miss logic
-    logic o_valid; // cache_mem[set_index][lru_way].valid 
-    logic o_dirty; // cache_mem[set_index][lru_way].dirty
     logic [25:0] evict_tag; // tag of the exvict way
     logic [31:0] refill_addr; // address = {tag, set_index, 4'b0000}
     // basically saved data for a write miss
@@ -124,8 +124,8 @@ module setasscache (
                     break;
                 end
             end
-            o_valid = cache[set_index][lru_way].valid;
-            o_dirty = cache[set_index][lru_way].dirty;
+            vic_valid = cache[set_index][lru_way].valid;
+            vic_dirty = cache[set_index][lru_way].dirty;
             evict_tag = cache[set_index][lru_way].tag;
         end
 

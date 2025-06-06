@@ -400,7 +400,7 @@ Cache Cache (
 //====== Data Memory Cache ====================================================
 
 logic [31:0] ow0, ow1, ow2, ow3, dw0, dw1, dw2, dw3, mem_wr_addr, mem_rd_addr;
-logic mem_read, mem_write, dm_hit, dm_hit, dm_update, dm_stall, dm_writeback, dm_valid, dm_dirty;
+logic mem_read, mem_write, dm_hit, dm_update, dm_stall, dm_writeback, dm_victim_valid, dm_victim_dirty, cache_stall;
 
 setasscache setasscache(
     .CLK(CLK), //top
@@ -408,8 +408,8 @@ setasscache setasscache(
     .address(rd), // main mem
     .read(ex_mem_inst.memRead2), 
     .write(ex_mem_inst.memWrite), 
-    .write_data(ex_inst.rs2), //check me on this
-    .size(ex_mem_imem_nst.mem_type[1:0]),  //mem input
+    .write_data(ex_mem_inst.rs2), //check me on this
+    .size(ex_mem_inst.mem_type[1:0]),  //mem input
     .sign(ex_mem_inst.mem_type[2]),  //mem input
     .update(dm_update), // fsm input
     .w0(dw0),  // block 1
@@ -430,7 +430,9 @@ setasscache setasscache(
     .mem_read(mem_read),
     .mem_rd_addr(mem_rd_addr),
     .mem_write(mem_write),
-    .mem_wr_addr(mem_wr_addr)
+    .mem_wr_addr(mem_wr_addr),
+    .vic_dirty(dm_victim_dirty),
+    .vic_valid(dm_victim_valid)
 );
 
 
@@ -439,8 +441,8 @@ DM_FSM Cache_FSM ( // added dirty, vali, and writeback
      .miss(dm_miss),
      .CLK(CLK),
      .RST(RESET),
-     .valid(dm_valid), // from cache
-     .dirty(dm_dirty), // from cache
+     .valid(dm_victim_valid), // from cache
+     .dirty(dm_victim_dirty), // from cache
      .update(dm_update),  // out
      .pc_stall(dm_stall),      // (stall)
      .writeback(dm_writeback) // to cache
