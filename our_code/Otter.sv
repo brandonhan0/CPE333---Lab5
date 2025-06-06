@@ -400,7 +400,7 @@ Cache Cache (
 //====== Data Memory Cache ====================================================
 
 logic [31:0] ow0, ow1, ow2, ow3, dw0, dw1, dw2, dw3, mem_wr_addr, mem_rd_addr;
-logic mem_read, mem_write, dm_hit, dm_hit, dm_update, dm_stall;
+logic mem_read, mem_write, dm_hit, dm_hit, dm_update, dm_stall, dm_writeback, dm_valid, dm_dirty;
 
 setasscache setasscache(
     .CLK(CLK), //top
@@ -428,16 +428,19 @@ setasscache setasscache(
 );
 
 
-DM_FSM Cache_FSM (
+DM_FSM Cache_FSM ( // added dirty, vali, and writeback
      .hit(dm_hit),        // in
      .miss(dm_miss),
      .CLK(CLK),
      .RST(RESET),
+     .valid(dm_valid), // from cache
+     .dirty(dm_dirty), // from cache
      .update(dm_update),  // out
-     .pc_stall(dm_stall)      // (stall)
+     .pc_stall(dm_stall),      // (stall)
+     .writeback(dm_writeback) // to cache
     );
 
-dmem DataMemory (
+dmem DataMemory ( // changed implementation for writing and reading 
     .MEM_CLK (CLK),
     .MEM_RDEN2 (mem_read),        // read enable data
     .MEM_WE2 (mem_write),          // write enable.

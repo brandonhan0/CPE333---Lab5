@@ -15,13 +15,18 @@ module setasscache (
     input  logic         sign,     // sign extension for reads
     input  logic [31:0]  IO_IN,    // Memory Mapped IO Read
     input  logic         update,
+    input  logic         writeback,
     input  logic [31:0]  w0, w1, w2, w3,
     output logic [31:0]  ow0, ow1, ow2, ow3,
     output logic [31:0]  out,    // output when loading
     output logic         hit,
     output logic         miss,
     output logic         IO_WR, // Memory Mapped IO Write
-    output logic         weAddrValid
+    output logic         weAddrValid,
+    output logic         mem_read,    // signal to fetch block from memory
+    output logic [31:0]  mem_rd_addr, // address of the block to fetch
+    output logic         mem_write,   // from fsm to write dirty block to mem
+    output logic [31:0]  mem_wr_addr // address of block to write to
     );
     
     parameter NUM_SETS    = 4;
@@ -57,174 +62,212 @@ module setasscache (
     logic [31:0]     read_data;
     logic  i, j;
     integer lru_way = 0;
+    //hit logic
+    logic line_hit; // 1 if tag was found in set
+    logic [1:0] hit_way; // index of the way that was hit
+    // miss logic
+    logic o_valid; // cache_mem[set_index][lru_way].valid 
+    logic o_dirty; // cache_mem[set_index][lru_way].dirty
+    logic [25:0] evict_tag; // tag of the exvict way
+    logic [31:0] refill_addr; // address = {tag, set_index, 4'b0000}
+    // basically saved data for a write miss
+    logic missed_is_write;
+    logic [1:0] missed_word_offset;
+    logic [31:0] missed_write_data;
+    // preadjusted out data if we wanna j like throw away the size shit we can j stick w this
+    logic [31:0]  raw_read_word;
 
-    
-// ========= STOLEN FROM MEM FILE =================================================================
+    //========== picking apart address =======================================
 
+    assign word_offset = address[3:2];  // which block
+    assign set_index   = address[5:4];  // which of the 4 sets
+    assign tag      = address[31:6]; // top 26 bits
+    assign refill_addr = { tag, set_index, 4'b0000 }; // addr to put into dmem for anything brycen was right we j had to do ts
 
-    logic [31:0] ioBuffer, memReadSized;
-    logic [1:0] byteOffset;     
-    assign byteOffset = address[1:0];     
+    //========== determine if we hit/miss logic ==============================================
+
 
     always_comb begin
-      case({sign,size,byteOffset})
-        5'b00011: memReadSized = {{24{read_data[31]}},read_data[31:24]};  // signed byte
-        5'b00010: memReadSized = {{24{read_data[23]}},read_data[23:16]};
-        5'b00001: memReadSized = {{24{read_data[15]}},read_data[15:8]};
-        5'b00000: memReadSized = {{24{read_data[7]}},read_data[7:0]};
-                                    
-        5'b00110: memReadSized = {{16{read_data[31]}},read_data[31:16]};  // signed half
-        5'b00101: memReadSized = {{16{read_data[23]}},read_data[23:8]};
-        5'b00100: memReadSized = {{16{read_data[15]}},read_data[15:0]};
-            
-        5'b01000: memReadSized = read_data;                   // word
-               
-        5'b10011: memReadSized = {24'd0,read_data[31:24]};    // unsigned byte
-        5'b10010: memReadSized = {24'd0,read_data[23:16]};
-        5'b10001: memReadSized = {24'd0,read_data[15:8]};
-        5'b10000: memReadSized = {24'd0,read_data[7:0]};
-               
-        5'b10110: memReadSized = {16'd0,read_data[31:16]};    // unsigned half
-        5'b10101: memReadSized = {16'd0,read_data[23:8]};
-        5'b10100: memReadSized = {16'd0,read_data[15:0]};
-            
-        default:  memReadSized = 32'b0;     // unsupported size, byte offset combination
-      endcase
-    end
+        line_hit = 1'b0;
+        hit_way = 2'b00;
+        valid = 1'b0;
+        dirty = 1'b0;
+        evict_tag = 26'd0;
+        missed_is_write = 1'b0;
+        missed_word_offset = 2'd0;
+        missed_write_data = 32'd0;
+        // 1) Check all WAYS in this set for a tag match + valid
+        for (i = 0; i < WAYS; i++) begin
+            if (cache[set_index][i].valid && (cache[set_index][i].tag == tag)) begin
+                line_hit       <= 1'b1;
+                hit_way   = i[1:0];
+            end
+        end
+        // determine hit
+        if ((read || write) && line_hit) begin
+            hit = 1'b1; // IO hit signal
+        end else begin
+            hit = 1'b0;
+        end
+
+        // determine miss
+        if ((read || write) && !line_hit) begin
+            miss = 1'b1;
+        end else begin
+            miss = 1'b0;
+        end
+        
+        // if miss determine LRU way
+        if (miss) begin
+            lru_way = 0;
+            for (i = 0; i < WAYS; i++) begin
+                if (lru[set_index][i] == (WAYS - 1)) begin
+                    lru_way = i;
+                    break;
+                end
+            end
+            o_valid = cache[set_index][lru_way].valid;
+            o_dirty = cache[set_index][lru_way].dirty;
+            evict_tag = cache[set_index][lru_way].tag;
+        end
+
+        // if write miss we need to set data
+        if (write && miss) begin
+            missed_is_write    = 1'b1;
+            missed_word_offset = word_offset;
+            missed_write_data  = write_data;
+        end
+    end 
 
 
-
-    // Memory Mapped IO
-    always_comb begin
-      if(address >= 32'h00010000) begin  // external address range
-        IO_WR = write;                 // IO Write
-        out = ioBuffer;            // IO read from buffer
-        weAddrValid = 0;                 // address beyond memory range
-      end
-      else begin
-        IO_WR = 0;                  // not MMIO
-        out = memReadSized;   // output sized and sign extended data
-        weAddrValid = write;      // address in valid memory range
-      end
-    end
-
-    
+    //=========== tag updates and LRU on hit or updates ====================================
+    //
     // On reset, clear all valid/dirty bits and initialize LRU counters
+    //
+
+    // ----------- hit ---------------------
     always_ff @(posedge CLK or posedge RST) begin
-        if(read)
-            ioBuffer <= IO_IN;
         if (RST) begin
             for (i = 0; i < NUM_SETS; i++) begin
-                for (j = 0; j < WAYS; j++) begin
+                for (int j = 0; j < WAYS; j++) begin
                     cache[i][j].valid <= 1'b0;
                     cache[i][j].dirty <= 1'b0;
                     cache[i][j].tag   <= 26'd0;
                     cache[i][j].block <= 128'd0;
-                    lru[i][j]         <= j[1:0];  // initialize so that way 0 is MRU=0, way 1=1, etc.
+                    lru_cnt[i][j]     <= j[1:0];  // initialize so that way 0 is MRU=0, way 1=1, etc.
                 end
             end
-            hit <= 0;
-            miss <= 0;
-            memReadSized <= 32'd0;
-            IO_WR <= 0;
-            
-        end else if (read || write) begin
-            // Default: assume miss until proven otherwise
-            hit         <= 1'b0;
-            integer hit_way = -1;
-            
-            // 1) Check all WAYS in this set for a tag match + valid
-            for (i = 0; i < WAYS; i++) begin
-                if (cache[set_index][i].valid && (cache[set_index][i].tag == tag)) begin
-                    hit       <= 1'b1;
-                    hit_way   = i;
-                    break;
+            raw_read_word <= 32'd0;
+        end else begin
+            if(hit)begin // on hit we read block
+                raw_read_word <= cache[set_index][hit_way].block[word_offset * WORD_BITS +: WORD_BITS]; // extracting word thats unformatted by memfile stuff
+                if(write)begin // if its a store hit we write into cache and set dirty to 0
+                    cache[set_index][hit_way].block[word_offset * WORD_BITS +: WORD_BITS] <= write_data; // PUT IT IN EUGHH
+                    cache[set_index][hit_way].dirty <= 1'b1;
                 end
-            end
-
-
-            if (hit) begin
-                // 2a) On a hit: extract the requested 32-bit word from the 128-bit block
-                memReadSized <= cache[set_index][hit_way].block[word_offset * 32 +: 32];
-
-                
-
-                if (write) begin
-                    // 2b) On store, overwrite just the 32 bit slice and set dirty
-                    if (cache[set_index][lru_way].valid && cache[set_index][lru_way].dirty) begin
-                        // *** WRITEBACK should occur here ***
-                        ow0 <= cache[set_index][lru_way].block[31:0];
-                        ow1 <= cache[set_index][lru_way].block[63:32];
-                        ow2 <= cache[set_index][lru_way].block[95:64];
-                        ow3 <= cache[set_index][lru_way].block[127:96];
-                    end else begin
-                        cache[set_index][hit_way].block[word_offset * 32 +: 32] <= write_data;
-
-                        cache[set_index][hit_way].dirty                         <= 1'b1;
+                // updates lru adding 1 to every lru in the set that wasnt hit and setting the lru of the way we hit to 0 ty bryce
+                for (int k = 0; k < WAYS; k++) begin
+                    if (lru_cnt[set_index][k] < lru_cnt[set_index][hit_way]) begin
+                        lru_cnt[set_index][k] <= lru_cnt[set_index][k] + 1;
                     end
                 end
-
-
-                // 2c) Update LRU: all ways with LRU < this way get +1, this way becomes 0 (MRU)
-                for (i = 0; i < WAYS; i++) begin
-                    if (lru[set_index][i] < lru[set_index][hit_way])
-                        lru[set_index][i] <= lru[set_index][i] + 1;
-                end
-                lru[set_index][hit_way] <= 2'd0;
+                lru_cnt[set_index][hit_way] <= 2'd0;
             end
-            else begin
-                // 3) Miss: pick the way whose LRU counter == (WAYS-1) (i.e. least recently used)
-                lru_way = 0;
-                for (i = 0; i < WAYS; i++) begin
-                    if (lru[set_index][i] == (WAYS - 1)) begin
-                        lru_way = i;
-                        break;
+            // -------------- refill fsm case (new stuff not from bryce) ------------ 
+
+            // this happens when we wanted to write smth into a block but 
+            // the data in the current way was dirty and not yet put into 
+            // emory so its like a queue
+
+            else if(update)begin
+                cache[set_index][lru_way].block <= { w0, w1, w2, w3 }; // update block (j a normal update for typical cases) 
+                cache[set_index][lru_way].valid <= 1'b1;
+
+                if (missed_is_write) begin  // if previos cc miss was store miss so replace the updated
+                cache[set_index][lru_way].block[missed_word_offset * WORD_BITS +: WORD_BITS] <= missed_write_data;
+                cache[set_index][lru_way].dirty <= 1'b1;
+                end
+                else begin
+                    // load miss so this is unedited set dirty bit to 0
+                    cache[set_index][lru_way].dirty <= 1'b0;
+                end
+                for (int m = 0; m < WAYS; m++) begin // update lru
+                    if (lru_cnt[set_index][m] < lru_cnt[set_index][lru_way]) begin
+                        lru_cnt[set_index][m] <= lru_cnt[set_index][m] + 1;
                     end
                 end
-
-
-                // 3a) If that line is valid & dirty, we'd need a writeback (handled externally)
-                if (cache[set_index][lru_way].valid && cache[set_index][lru_way].dirty) begin
-                    // *** WRITEBACK should occur here (outside this module) ***
-                    ow0 <= cache[set_index][lru_way].block[31:0];
-                    ow1 <= cache[set_index][lru_way].block[63:32];
-                    ow2 <= cache[set_index][lru_way].block[95:64];
-                    ow3 <= cache[set_index][lru_way].block[127:96];
-                    
-                end
-
-
-                // 3b) Bring the new 128-bit block in from memory.
-                //     Here we simulate it with a dummy constant; in real hardware you’d assert a memory-read.
-                if(update) begin
-                    cache[set_index][lru_way].block <= {w0, w1, w2, w3};
-                    cache[set_index][lru_way].valid <= 1'b1;
-                    cache[set_index][lru_way].tag   <= tag;
-                end
-                // If this was a store miss, we overwrite that 32-bit slice immediately:
-                cache[set_index][lru_way].dirty <= (write ? 1'b1 : 1'b0);
-                if (write) begin
-                    cache[set_index][lru_way].block[word_offset * 32 +: 32] <= write_data;
-                end
-
-
-                // 3c) Return the requested word (either from the fetched block or the newly written slice)
-                memReadSized <= cache[set_index][lru_way].block[word_offset * 32 +: 32];
-
-
-                // 3d) Update LRU similarly: this way becomes MRU (0), increment all others that were < old LRU of lru_way
-                for (i = 0; i < WAYS; i++) begin
-                    if (lru[set_index][i] < lru[set_index][lru_way])
-                        lru[set_index][i] <= lru[set_index][i] + 1;
-                end
-                lru[set_index][lru_way] <= 2'd0;
+            lru_cnt[set_index][lru_way] <= 2'd0;
             end
-        end
-        else begin
-            // If neither read nor write, do nothing to cache/memory
-            hit <= 1'b0;
+            // -------------- miss -----------------------
+        
+            else if(miss)begin // miss == 0 but update == 0
+            // alr handled this at the top fsm will handle miss logic, next cc the fsm will either write back to ram or refill
+            end
         end
     end
 
 
+
+
+    //=========== dmem signal logic ============================================
+
+    // mem_read, mem_write, mem_wr/rd_addr, ow0..ow3
+
+    // whenever we update we want to send 
+
+
+
+    // ========== MEM IO, we can delete ts we stole this anyways =============================
+    logic [1:0] byteOffset;     
+    always_comb begin
+      if(address >= 32'h00010000) begin  // external address range
+        IO_WR = write;                 // IO Write
+        out = IO_IN;            // IO read from buffer
+        weAddrValid = 0;                 // address beyond memory range
+      end
+      else begin
+        IO_WR = 0;                  // not MMIO
+        out = read_data_sized;   // output sized and sign extended data
+        weAddrValid = write;      // address in valid memory range
+      end
+    end
+
+    // ========= STOLEN FROM MEM FILE =================================================================     
+
+    always_comb begin
+            case ({ sign, size, address[1:0] })
+                // signed byte
+                4'b0_00_00: read_data_sized = { {24{raw_read_word[ 7]}}, raw_read_word[ 7: 0] };
+                4'b0_00_01: read_data_sized = { {24{raw_read_word[15]}}, raw_read_word[15: 8] };
+                4'b0_00_10: read_data_sized = { {24{raw_read_word[23]}}, raw_read_word[23:16] };
+                4'b0_00_11: read_data_sized = { {24{raw_read_word[31]}}, raw_read_word[31:24] };
+
+                // signed halfword
+                4'b0_01_00: read_data_sized = { {16{raw_read_word[15]}}, raw_read_word[15: 0] };
+                4'b0_01_01: read_data_sized = { {16{raw_read_word[23]}}, raw_read_word[23: 8] };
+                4'b0_01_10: read_data_sized = { {16{raw_read_word[31]}}, raw_read_word[31:16] };
+                4'b0_01_11: read_data_sized = { {16{raw_read_word[15]}}, raw_read_word[15: 0] };
+
+                // word (aligned or misaligned)
+                4'b0_10_00: read_data_sized = raw_read_word;
+                4'b0_10_01: read_data_sized = raw_read_word;
+                4'b0_10_10: read_data_sized = raw_read_word;
+                4'b0_10_11: read_data_sized = raw_read_word;
+
+                // unsigned byte
+                4'b1_00_00: read_data_sized = { 24'd0, raw_read_word[ 7: 0] };
+                4'b1_00_01: read_data_sized = { 24'd0, raw_read_word[15: 8] };
+                4'b1_00_10: read_data_sized = { 24'd0, raw_read_word[23:16] };
+                4'b1_00_11: read_data_sized = { 24'd0, raw_read_word[31:24] };
+
+                // unsigned halfword
+                4'b1_01_00: read_data_sized = { 16'd0, raw_read_word[15: 0] };
+                4'b1_01_01: read_data_sized = { 16'd0, raw_read_word[23: 8] };
+                4'b1_01_10: read_data_sized = { 16'd0, raw_read_word[31:16] };
+                4'b1_01_11: read_data_sized = { 16'd0, raw_read_word[15: 0] };
+
+                default:   read_data_sized = 32'd0;
+            endcase
+        end
 endmodule
+
