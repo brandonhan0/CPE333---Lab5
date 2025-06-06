@@ -1,8 +1,6 @@
 `timescale 1ns / 1ps
 
-
-// MISING "w0-w3 and ow0-ow3 logic". Missing writeback, "missing mem module size and sign stuff"
-
+// should be all done
 
 module setasscache (
     input  logic         CLK,
@@ -12,8 +10,8 @@ module setasscache (
     input  logic         write,
     input  logic [31:0]  write_data,
     input  logic [1:0]   size,
-    input  logic         sign,     // sign extension for reads
-    input  logic [31:0]  IO_IN,    // Memory Mapped IO Read
+    input  logic         sign, // sign extension for reads
+    input  logic [31:0]  IO_IN, //io in
     input  logic         update,
     input  logic         writeback,
     input  logic [31:0]  w0, w1, w2, w3,
@@ -21,7 +19,7 @@ module setasscache (
     output logic [31:0]  out,    // output when loading
     output logic         hit,
     output logic         miss,
-    output logic         IO_WR, // Memory Mapped IO Write
+    output logic         IO_WR, // io
     output logic         weAddrValid,
     output logic         mem_read,    // signal to fetch block from memory
     output logic [31:0]  mem_rd_addr, // address of the block to fetch
