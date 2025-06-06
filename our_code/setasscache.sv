@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 
-// MISING "w0-w3 and ow0-ow3 logic". Missing writeback, "missing mem module size and sign stuff"
+// should be done
 
 
 module setasscache (
