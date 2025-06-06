@@ -212,9 +212,28 @@ module setasscache (
     //=========== dmem signal logic ============================================
 
     // mem_read, mem_write, mem_wr/rd_addr, ow0..ow3
+    // whenever we update we want to fetch block = {tag, set_index, 4’b0000} from dmem
 
-    // whenever we update we want to send 
+    assign mem_read = update;
+    assign mem_rd_addr = refill_addr;
 
+    // whenever writeback = 1 we want to write to line in dmem so it can write
+    assign mem_write   = writeback;
+    assign mem_wr_addr = {evict_tag, set_index, 4'b0000 };
+
+    always_comb begin // if writeback then that means this block is dirty and has to go to main ram
+        if (writeback) begin
+            ow0 = cache[set_index][lru_way].block[31:0];
+            ow1 = cache[set_index][lru_way].block[63:32];
+            ow2 = cache[set_index][lru_way].block[95:64];
+            ow3 = cache[set_index][lru_way].block[127:96];
+        end else begin // else just set to 0 no changes made to dmem
+            ow0 = 32'd0;
+            ow1 = 32'd0;
+            ow2 = 32'd0;
+            ow3 = 32'd0;
+        end
+    end
 
 
     // ========== MEM IO, we can delete ts we stole this anyways =============================
