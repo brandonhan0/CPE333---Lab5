@@ -27,42 +27,31 @@
         $readmemh("Test_All.mem", memory, 0, 16383);
     end
     
+    // determines word address from the byte address making the block search logic obsolete
+    logic [13:0] word_rd_index;
+    logic [13:0] word_wr_index;
+    always_comb begin
+        word_rd_index = ( mem_rd_addr[15:2] ); 
+        word_wr_index = ( mem_wr_addr[15:2] );
+    end
             
     // BRAM requires all reads and writes to occur synchronously
     always_ff @(posedge MEM_CLK) begin
     
       // save data (WD) to memory (ADDR2)
       if (MEM_WE2 == 1) begin     // write enable and valid address space
-        memory[mem_wr_addr + 0]  <= ow0;
-        memory[mem_wr_addr + 1]  <= ow1;
-        memory[mem_wr_addr + 2]  <= ow2;
-        memory[mem_wr_addr + 3]  <= ow3;
+        memory[word_wr_index + 0]  <= ow0;
+        memory[word_wr_index + 1]  <= ow1;
+        memory[word_wr_index + 2]  <= ow2;
+        memory[word_wr_index + 3]  <= ow3;
       end
     
-      if (MEM_RDEN2) begin     // Read word from memory
-      case(byteOffset)
-      
-      2'b00: w0 <= memory[mem_rd_addr + 0];
-             w1 <= memory[mem_rd_addr + 1];
-             w2 <= memory[mem_rd_addr + 2];
-             w3 <= memory[mem_rd_addr + 3];
-
-      2'b01: w0 <= memory[mem_rd_addr - 1];
-             w1 <= memory[mem_rd_addr + 0];
-             w2 <= memory[mem_rd_addr + 1];
-             w3 <= memory[mem_rd_addr + 2];
-
-      2'b10: w0 <= memory[mem_rd_addr - 2];
-             w1 <= memory[mem_rd_addr - 1];
-             w2 <= memory[mem_rd_addr + 0];
-             w3 <= memory[mem_rd_addr + 1];
-
-      2'b11: w0 <= memory[mem_rd_addr - 3];
-             w1 <= memory[mem_rd_addr - 2];
-             w2 <= memory[mem_rd_addr - 1];
-             w3 <= memory[mem_rd_addr + 0];
-
-      endcase
+      if (MEM_RDEN2) begin     // dont need big ah case statement bc when we read we fetch the whole block basically so offset doesnt matter
+                               // so we just make offset obsolete and use the address without offset
+        w0 <= memory[word_rd_index + 0];
+        w1 <= memory[word_rd_index + 1];
+        w2 <= memory[word_rd_index + 2];
+        w3 <= memory[word_rd_index + 3];
         
       end
     end
