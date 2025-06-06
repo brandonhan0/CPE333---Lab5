@@ -406,10 +406,10 @@ setasscache setasscache(
     .CLK(CLK), //top
     .RST(RST), //top
     .address(rd), // main mem
-    .read(de_ex_inst.memRead2), 
-    .write(de_ex_inst.memWrite), 
-    .write_data(de_ex_inst.rs2), //check me on this
-    .size(ex_mem_inst.mem_type[1:0]),  //mem input
+    .read(ex_mem_inst.memRead2), 
+    .write(ex_mem_inst.memWrite), 
+    .write_data(ex_inst.rs2), //check me on this
+    .size(ex_mem_imem_nst.mem_type[1:0]),  //mem input
     .sign(ex_mem_inst.mem_type[2]),  //mem input
     .update(dm_update), // fsm input
     .w0(dw0),  // block 1
@@ -425,6 +425,12 @@ setasscache setasscache(
     .ow2(ow2), 
     .ow3(ow3),
     .IO_WR(IOBUS_WR), //top
+    .writeback(dm_writeback),
+    .weAddrValid(dm_valid),
+    .mem_read(mem_read),
+    .mem_rd_addr(mem_rd_addr),
+    .mem_write(mem_write),
+    .mem_wr_addr(mem_wr_addr)
 );
 
 
